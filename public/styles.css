@@ -1,0 +1,294 @@
+/* Reset y estructura base */
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f7fa;
+}
+
+/* Contenedor principal horizontal */
+.container {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Panel izquierdo (30% de ancho) */
+.left-panel {
+    flex: 0 0 30%;
+    display: flex;
+    flex-direction: column;
+    background-color: #ffffff;
+    border-right: 1px solid #e0e0e0;
+    padding: 20px;
+    box-sizing: border-box;
+    height: 100%;
+}
+
+.left-row-top {
+    flex-shrink: 0;
+    flex-grow: 0;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+}
+
+.left-row-middle {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+}
+
+
+
+
+.left-row-bottom {
+    /* Mantén tus propiedades existentes */
+    flex-shrink: 0;
+    flex-grow: 0;
+    color: #666;
+    font-size: 0.9em;
+    box-sizing: border-box;
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+
+    /* AÑADE ESTO para convertirlo en un contenedor flex para su contenido */
+    display: flex;
+    flex-direction: column;
+    height: calc(55vh - 40px); /* Opcional: ajusta la altura si prefieres que la lista tenga más espacio */
+    min-height: 0; /* Permite que se encoja */
+}
+
+#classificationListContainer {
+    flex-grow: 1; /* Permite que la lista ocupe el espacio restante */
+    overflow-y: auto; /* Para que la lista haga scroll si es muy larga */
+    padding-right: 5px; /* Pequeño padding para el scrollbar */
+}
+
+/* Estilos para los elementos de la lista generados dinámicamente */
+#classificationListContainer ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#classificationListContainer li {
+    padding: 8px 5px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.2s ease;
+}
+
+#classificationListContainer li:last-child {
+    border-bottom: none;
+}
+
+#classificationListContainer li:hover {
+    background-color: #eaf6ff;
+}
+
+#classificationListContainer li.selected {
+    background-color: #007bff;
+    color: white;
+    font-weight: bold;
+}
+
+#classificationListContainer li .count {
+    background-color: #e0e0e0;
+    color: #555;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.8em;
+}
+
+#classificationListContainer li.selected .count {
+    background-color: #fff;
+    color: #007bff;
+}
+
+
+
+/* Panel derecho (70% de ancho) */
+.right-panel {
+    flex-grow: 1;
+    background-color: #fdfdfd;
+    padding: 20px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* Título en panel derecho */
+.right-panel h2 {
+    color: #0056b3;
+    margin: 0 0 10px 0;
+    font-size: 1.5em;
+}
+
+/* Controles superiores */
+#modelControls {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Input y botón */
+#selectedFileName {
+    flex-grow: 1;
+    padding: 8px;
+    font-size: 1em;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#analyzeButton {
+    padding: 8px 12px;
+}
+
+/* Estilos del visor Forge */
+#forgeViewer {
+    flex-grow: 1;
+    min-height: 0;
+    overflow: hidden;
+    width: 100%;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background-color: #ffffff;
+}
+
+/* Estilos generales */
+h1, h2, h3 {
+    color: #0056b3;
+    margin: 0 0 10px 0;
+    box-sizing: border-box;
+}
+
+button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+    margin-bottom: 10px;
+    transition: background-color 0.3s ease;
+    box-sizing: border-box;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+select {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #fff;
+    font-size: 0.95em;
+    box-sizing: border-box;
+}
+
+#folderTree {
+    border: 1px solid #e0e0e0;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+    overflow-y: auto;
+    min-height: 0;
+    box-sizing: border-box;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+#folderTree ul {
+    list-style: none;
+    padding-left: 15px;
+    margin: 0;
+    flex-grow: 1;
+}
+
+#folderTree li {
+    padding: 5px 0;
+    cursor: pointer;
+    color: #444;
+}
+
+#folderTree li:hover {
+    background-color: #eaf6ff;
+    color: #0056b3;
+}
+
+p {
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+
+
+/* Asegura que el contenedor principal del Viewer ocupe el 100% del espacio de forgeViewer */
+#forgeViewer > .adsk-viewing-viewer {
+    position: relative; /* Importante para que los hijos con position: absolute se posicionen correctamente */
+    width: 100% !important;
+    height: 100% !important;
+    display: flex; /* Asegura que sus hijos también respeten flexbox */
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Asegura que el canvas y los overlays dentro del visor se ajusten */
+#forgeViewer canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block; /* Elimina cualquier espacio extra que pueda generar el canvas como inline-block */
+}
+
+/* También puedes apuntar a los divs que Forge crea para el control de la escena y la interfaz */
+#forgeViewer .lmv-canvas-wrap,
+#forgeViewer .lmv-viewer-controls,
+#forgeViewer .lmv-full-gui {
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute; /* O relative, dependiendo de la estructura interna, pero absoluto suele ser necesario para la capa superior */
+    top: 0;
+    left: 0;
+    /* Considera si necesitas flex-grow: 1; aquí si son contenedores flex, pero !important en height/width suele ser suficiente */
+}
+
+/* Si hay algún otro div intermedio que no se ajuste, puedes añadirlo aquí */
+#forgeViewer .adsk-lmv-viewer { /* Este es otro contenedor común */
+    width: 100% !important;
+    height: 100% !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Asegúrate de que tu forgeViewer original siga teniendo sus propiedades flexbox */
+#forgeViewer {
+    flex-grow: 1;
+    min-height: 0;
+    overflow: hidden;
+    width: 100%;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background-color: #ffffff;
+    /* Asegúrate que no haya un height: fijo; aquí */
+}
