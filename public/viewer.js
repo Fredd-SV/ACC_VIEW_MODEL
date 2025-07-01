@@ -278,7 +278,7 @@ async function initializeModelColors() {
     console.log('Color de selección configurado a rojo.');
 }
 
-
+//COMENTARIO DE PRUEBA
 // Función para procesar las propiedades del modelo y construir la lista de clasificación
 async function processModelProperties() {
     console.log('--- processModelProperties INICIADO ---');
