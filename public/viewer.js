@@ -238,31 +238,46 @@ async function initializeModelColors() {
     }
 
     allModelDbIds = [];
-    const rootId = viewer.model.getRootId();
+    const positionsMap = new Set();
 
-    await new Promise(resolve => {
-        viewer.model.getObjectTree(function(tree) {
-            tree.enumNodeChildren(rootId, function(dbId) {
-                allModelDbIds.push(dbId);
-            }, true /* recurse */);
-            console.log(`[initializeModelColors] dbIds encontrados: ${allModelDbIds.length}`); // <-- NUEVO LOG
-            resolve();
-        });
+    const tree = await new Promise(resolve => {
+        viewer.model.getObjectTree(resolve);
     });
 
-    // 2. Aplicar color gris a todos los elementos inicialmente
-    // Esto se ejecutará SÓLO después de que allModelDbIds esté lleno
+    tree.enumNodeChildren(tree.getRootId(), dbId => {
+        const fragIds = [];
+        viewer.model.getData().instanceTree.enumNodeFragments(dbId, fragId => {
+            fragIds.push(fragId);
+        });
+
+        if (fragIds.length === 0) return;
+
+        const fragList = viewer.model.getFragmentList();
+        const box = new THREE.Box3();
+        fragList.getWorldBounds(fragIds[0], box);
+
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+
+        const key = `${center.x.toFixed(3)}|${center.y.toFixed(3)}|${center.z.toFixed(3)}`;
+        if (!positionsMap.has(key)) {
+            positionsMap.add(key);
+            allModelDbIds.push(dbId);
+        }
+    }, true);
+
+    console.log(`[initializeModelColors] dbIds con posición única encontrados: ${allModelDbIds.length}`);
+
+    // Color gris a todos
     allModelDbIds.forEach(dbId => {
         viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, viewer.model, true);
     });
-    viewer.impl.invalidate(true, true, true); // Forzar un redibujado del visor
 
-    console.log('Modelo inicializado en escala de grises.');
-
-    // 3. Establecer el color de selección (esto ya estaba bien, pero se asegura de ejecutar después de la carga de dbIds)
-    viewer.setSelectionColor(new THREE.Color(1, 0, 0)); // Rojo brillante
+    viewer.impl.invalidate(true, true, true);
+    viewer.setSelectionColor(new THREE.Color(1, 0, 0));
     console.log('Color de selección configurado a rojo.');
 }
+
 
 // Función para procesar las propiedades del modelo y construir la lista de clasificación
 async function processModelProperties() {
@@ -296,6 +311,11 @@ async function processModelProperties() {
         try {
             const props = await getPropertiesAsync(dbId);
             const properties = props.properties;
+            
+            const categoryProp = properties.find(p => p.displayName === 'Category');
+            if (categoryProp && categoryProp.displayValue.includes('Type')) {
+                continue; // Omitir tipos
+            }
 
             let codigoPartida1Value = null;
             let descripcionPartida1Value = null;
