@@ -266,14 +266,14 @@ async function initializeModelColors() {
 
 // Función para procesar las propiedades del modelo y construir la lista de clasificación
 async function processModelProperties() {
+    console.log('--- processModelProperties INICIADO ---');
     if (!viewer || !viewer.model) {
-        console.warn('Visor o modelo no disponible para procesar propiedades.');
+        console.warn('[processModelProperties] Visor o modelo no disponible. Saliendo.');
         return;
     }
 
-    classificationData = {
-        'VACIO': { dbIds: new Set(), visible: true }
-    };
+    classificationData = {};
+    console.log('[processModelProperties] classificationData inicializada VACÍA.');
 
     function getPropertiesAsync(dbId) {
         return new Promise((resolve, reject) => {
@@ -282,51 +282,82 @@ async function processModelProperties() {
     }
 
     if (allModelDbIds.length === 0) {
-        console.error('ERROR: allModelDbIds está vacío. La clasificación no puede continuar.');
+        console.error('[processModelProperties] ERROR: allModelDbIds está vacío. La clasificación no puede continuar.');
         renderClassificationList();
         return;
     }
+
+    console.log(`[processModelProperties] Iniciando procesamiento de propiedades para ${allModelDbIds.length} elementos.`);
+
+    const groupedDbIds = new Set(); // ← Para registrar qué dbIds ya fueron agrupados
+    let processedCount = 0;
 
     for (const dbId of allModelDbIds) {
         try {
             const props = await getPropertiesAsync(dbId);
             const properties = props.properties;
 
-            let codigoPartida1 = null;
-            let descripcionPartida1 = null;
+            let codigoPartida1Value = null;
+            let descripcionPartida1Value = null;
 
-            for (const prop of properties) {
-                if (prop.displayName.trim() === 'S&P_CODIGO PARTIDA N°1') {
-                    const val = prop.displayValue?.trim();
-                    if (!val) {
-                        codigoPartida1 = null;
-                    } else {
-                        codigoPartida1 = val;
-                    }
-                }
-                if (prop.displayName.trim() === 'S&P_DESCRIPCION PARTIDA N°1') {
-                    descripcionPartida1 = prop.displayValue?.trim() || null;
-                }
+            const codeProp = properties.find(p => p.displayName.trim().toUpperCase() === 'S&P_CODIGO PARTIDA N°1');
+            if (codeProp) {
+                codigoPartida1Value = (codeProp.displayValue || '').trim();
             }
 
-            let key = codigoPartida1
-                ? `${codigoPartida1} ${descripcionPartida1 || ''}`.trim()
-                : 'VACIO';
-
-            if (!classificationData[key]) {
-                classificationData[key] = { dbIds: new Set(), visible: true };
+            const descProp = properties.find(p => p.displayName.trim().toUpperCase() === 'S&P_DESCRIPCION PARTIDA N°1');
+            if (descProp) {
+                descripcionPartida1Value = (descProp.displayValue || '').trim();
             }
 
-            classificationData[key].dbIds.add(dbId);
+            // Solo clasificar si tiene un código válido
+            if (codigoPartida1Value && codigoPartida1Value !== '') {
+                const groupingKey = codigoPartida1Value;
+                const displayGroupName = descripcionPartida1Value
+                    ? `${codigoPartida1Value} - ${descripcionPartida1Value}`
+                    : codigoPartida1Value;
+
+                if (!classificationData[groupingKey]) {
+                    classificationData[groupingKey] = {
+                        dbIds: new Set(),
+                        visible: true,
+                        displayName: displayGroupName
+                    };
+                }
+
+                classificationData[groupingKey].dbIds.add(dbId);
+                groupedDbIds.add(dbId);
+            }
 
         } catch (error) {
-            console.error(`Error obteniendo propiedades para dbId ${dbId}:`, error);
+            console.error(`[processModelProperties] Error obteniendo propiedades para dbId ${dbId}:`, error);
+        }
+
+        processedCount++;
+        if (processedCount % 1000 === 0) {
+            console.log(`[processModelProperties] Progreso: ${processedCount}/${allModelDbIds.length} elementos procesados.`);
         }
     }
 
+    // Identificar y agrupar los no clasificados
+    const ungroupedDbIds = allModelDbIds.filter(id => !groupedDbIds.has(id));
+    if (ungroupedDbIds.length > 0) {
+        classificationData['SIN CÓDIGO'] = {
+            dbIds: new Set(ungroupedDbIds),
+            visible: true,
+            displayName: 'SIN CÓDIGO'
+        };
+        console.log(`[processModelProperties] Elementos no clasificados agrupados en "SIN CÓDIGO": ${ungroupedDbIds.length}`);
+    }
+
+    console.log(`[processModelProperties] Procesamiento finalizado. Total de elementos procesados: ${processedCount}.`);
+    console.log('Contenido final de classificationData:', classificationData);
+
     renderClassificationList();
-    console.log('Clasificación completada.');
+    console.log('--- processModelProperties COMPLETADO ---');
 }
+
+
 
 // Maneja el clic en un elemento de la lista de clasificación
 function onClassificationListItemClick(key) {
@@ -377,24 +408,40 @@ function onViewerSelectionChanged(event) {
 }
 
 // Función para renderizar la lista de clasificación en el DOM
+// Función para renderizar la lista de clasificación en el DOM
 function renderClassificationList() {
+    console.log('--- renderClassificationList INICIADO ---');
     const container = document.getElementById('classificationListContainer');
     container.innerHTML = ''; // Limpiar el contenedor
 
     const ul = document.createElement('ul');
 
-    // Ordenar las claves alfabéticamente, pero "VACIO" al final
+    // Ordenar las claves alfabéticamente, pero "SIN CÓDIGO" al final
     const sortedKeys = Object.keys(classificationData).sort((a, b) => {
-        if (a === 'VACIO') return 1;
-        if (b === 'VACIO') return -1;
+        if (a === 'SIN CÓDIGO') return 1; // 'SIN CÓDIGO' al final
+        if (b === 'SIN CÓDIGO') return -1;
         return a.localeCompare(b);
     });
 
+    if (sortedKeys.length === 0) { // Si no hay claves, o solo 'SIN CÓDIGO' vacío
+        console.warn('[renderClassificationList] No hay datos de clasificación válidos para renderizar.');
+        container.innerHTML = '<p>No se encontraron categorías de clasificación.</p>';
+        console.log('--- renderClassificationList COMPLETADO (VACÍO) ---');
+        return;
+    }
+
+
     sortedKeys.forEach(key => {
         const item = classificationData[key];
+        // Asegúrate de que el grupo tenga dbIds antes de renderizarlo (excepto 'SIN CÓDIGO' que puede ser útil vacío)
+        if (item.dbIds.size === 0 && key !== 'SIN CÓDIGO') {
+            return; // Saltar si no hay elementos en este grupo (y no es 'SIN CÓDIGO')
+        }
+
         const li = document.createElement('li');
-        li.textContent = key;
-        li.dataset.key = key; // Almacenar la clave para referencia
+        // *** CAMBIO CLAVE AQUÍ: Usar item.displayName para el texto visible ***
+        li.textContent = item.displayName || key; // Fallback a key si displayName no existe (no debería pasar)
+        li.dataset.key = key; // Almacenar la clave de agrupación real para referencia
 
         const countSpan = document.createElement('span');
         countSpan.classList.add('count');
@@ -407,6 +454,7 @@ function renderClassificationList() {
 
     container.appendChild(ul);
     console.log('Lista de clasificación renderizada:', classificationData);
+    console.log('--- renderClassificationList COMPLETADO ---');
 }
 
 // Actualiza las clases 'selected' en los elementos de la lista en base a currentSelectedDbIds
