@@ -328,7 +328,6 @@ async function processModelProperties() {
     console.log('Clasificación completada.');
 }
 
-
 // Maneja el clic en un elemento de la lista de clasificación
 function onClassificationListItemClick(key) {
     const item = classificationData[key];
@@ -458,7 +457,6 @@ function updateClassificationListSelection() {
     });
 }
 
-
 // Maneja el evento de cambio de selección en el visor 3D
 function onViewerSelectionChanged(event) {
     // console.log('Selección en el visor ha cambiado:', event.dbIdArray);
@@ -470,25 +468,3 @@ window.addEventListener('resize', () => {
     if (viewer) viewer.resize();
 });
 
-
-
-function contarElementosConGeometria() {
-    if (!viewer || !viewer.model) {
-        console.warn('Viewer no disponible.');
-        return;
-    }
-
-    const instanceTree = viewer.model.getInstanceTree();
-    const rootId = instanceTree.getRootId();
-    let totalConGeometria = 0;
-
-    instanceTree.enumNodeChildren(rootId, function (dbId) {
-        const fragIds = [];
-        viewer.model.getFragIds(dbId, fragIds); // 🔥 AQUÍ el método correcto
-        if (fragIds.length > 0) {
-            totalConGeometria++;
-        }
-    }, true);
-
-    console.log(`✅ Total de elementos con geometría: ${totalConGeometria}`);
-}
