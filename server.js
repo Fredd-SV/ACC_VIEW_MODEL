@@ -1,15 +1,17 @@
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const axios = require('axios');
 const cors = require('cors');
 const morgan = require('morgan');
 const app = express();
 const cookieParser = require('cookie-parser');
-app.use(cookieParser());
 
+app.use(cookieParser());
 app.use(cors());
 app.use(morgan('dev'));
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
+
 
 const scopes = [
     'data:read',
@@ -19,7 +21,6 @@ const scopes = [
     'bucket:read',
     'viewables:read'
 ].join(' ');
-
 
 // Sirve index.html en la raíz
 app.get('/', (req, res) => {
