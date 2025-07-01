@@ -3,9 +3,14 @@ let viewer = null;
 
 let classificationData = {};
 let currentSelectedDbIds = new Set();
-let allModelDbIds = []; // Nuevo: para almacenar todos los dbIds del modelo y aplicar color inicial
-const DEFAULT_GRAY_COLOR = new THREE.Vector4(0.8, 0.8, 0.8, 1); // Un gris más claro
-const SELECTION_RED_COLOR = new THREE.Vector4(1, 0, 0, 0.8);    // R, G, B, Alpha para rojo (un poco transparente)
+let allModelDbIds = [];
+const DEFAULT_GRAY_COLOR = new THREE.Vector4(0.8, 0.8, 0.8, 1);
+const SELECTION_RED_COLOR = new THREE.Vector4(1, 0, 0, 0.8);
+
+// Variable para mantener el elemento de archivo RVT previamente seleccionado en el folderTree
+let previouslySelectedFileElement = null;
+// NUEVA VARIABLE: Para mantener el elemento de CARPETA previamente activo en el folderTree
+let previouslySelectedFolderElement = null;
 
 
 function login() {
@@ -82,6 +87,8 @@ async function loadRootFolder() {
 
         const container = document.getElementById('folderTree');
         container.innerHTML = '';
+        previouslySelectedFileElement = null; // Reiniciar selección de archivo
+        previouslySelectedFolderElement = null; // Reiniciar selección de carpeta
         await buildFolderTree(projectId, rootFolderUrn, container);
 
     } catch (error) {
@@ -105,6 +112,20 @@ async function buildFolderTree(projectId, folderUrn, container) {
                 li.addEventListener('click', async (e) => {
                     e.stopPropagation();
 
+                    // Lógica para el feedback visual de la carpeta seleccionada
+                    if (previouslySelectedFolderElement) {
+                        previouslySelectedFolderElement.classList.remove('active-folder'); // O 'data-active' si lo prefieres
+                    }
+                    li.classList.add('active-folder'); // Puedes crear este estilo en CSS
+                    previouslySelectedFolderElement = li;
+
+                    // Deseleccionar cualquier archivo RVT previamente seleccionado
+                    if (previouslySelectedFileElement) {
+                        previouslySelectedFileElement.classList.remove('selected-file');
+                        previouslySelectedFileElement = null;
+                    }
+
+
                     // Si ya está expandida, la colapsamos
                     if (li.querySelector('ul')) {
                         li.querySelector('ul').remove();
@@ -115,10 +136,25 @@ async function buildFolderTree(projectId, folderUrn, container) {
                 });
             } else if (item.type === 'items') {
                 li.addEventListener('click', (e) => {
-                    e.stopPropagation();  // Importante: evita que el clic en el archivo propague hacia carpetas padres
+                    e.stopPropagation();
+
+                    // Deseleccionar cualquier carpeta previamente activa
+                    if (previouslySelectedFolderElement) {
+                        previouslySelectedFolderElement.classList.remove('active-folder');
+                        previouslySelectedFolderElement = null;
+                    }
 
                     if (item.attributes.displayName.toLowerCase().endsWith('.rvt')) {
                         console.log('Archivo RVT seleccionado:', item);
+
+                        // Eliminar la clase de selección del elemento previamente seleccionado (solo para archivos RVT)
+                        if (previouslySelectedFileElement) {
+                            previouslySelectedFileElement.classList.remove('selected-file');
+                        }
+                        // Agregar la clase de selección al elemento actual
+                        li.classList.add('selected-file');
+                        // Actualizar el elemento previamente seleccionado
+                        previouslySelectedFileElement = li;
 
                         selectedItemUrn = item.relationships?.tip?.data?.id;
 
@@ -126,6 +162,15 @@ async function buildFolderTree(projectId, folderUrn, container) {
                         document.getElementById('analyzeButton').disabled = false;
                     } else {
                         console.log('Archivo no RVT ignorado:', item.attributes.displayName);
+                        // Si se selecciona un archivo no RVT, asegúrate de deseleccionar cualquier RVT anterior
+                        if (previouslySelectedFileElement) {
+                            previouslySelectedFileElement.classList.remove('selected-file');
+                            previouslySelectedFileElement = null;
+                        }
+                        // Asegúrate de que selectedItemUrn y analyzeButton también se reinicien para no RVT
+                        selectedItemUrn = null;
+                        document.getElementById('selectedFileName').value = '';
+                        document.getElementById('analyzeButton').disabled = true;
                     }
                 });
             }
@@ -162,7 +207,6 @@ document.getElementById('analyzeButton').addEventListener('click', async () => {
         const translateResult = await translateResponse.json();
         console.log('Resultado de la derivación:', translateResult);
 
-        // Opcional: Aquí puedes hacer polling para esperar a que el modelo termine la derivación antes de lanzarlo
         launchViewer(selectedItemUrn);
 
     } catch (error) {
@@ -197,13 +241,12 @@ async function launchViewer(urn) {
             viewer = new Autodesk.Viewing.GuiViewer3D(viewerDiv);
             const startedCode = viewer.start();
 
-            // *** MEJORA CLAVE: Añadir listeners para resize cuando el contenido esté listo ***
             viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, async () => {
                 console.log('GEOMETRY_LOADED_EVENT disparado. Redimensionando visor y procesando propiedades.');
                 viewer.resize();
-                
-                await initializeModelColors(); // NUEVA LLAMADA: Establece colores iniciales
-                await processModelProperties(); // La lógica de propiedades existente
+
+                await initializeModelColors();
+                await processModelProperties();
             });
 
             viewer.addEventListener(Autodesk.Viewing.VIEWER_STATE_RESTORED_EVENT, () => {
@@ -211,7 +254,6 @@ async function launchViewer(urn) {
                 viewer.resize();
             });
 
-            // *** NUEVO: Escuchar cambios de selección en el visor ***
             viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, onViewerSelectionChanged);
 
             console.log('Viewer started:', startedCode);
@@ -268,7 +310,6 @@ async function initializeModelColors() {
 
     console.log(`[initializeModelColors] dbIds con posición única encontrados: ${allModelDbIds.length}`);
 
-    // Color gris a todos
     allModelDbIds.forEach(dbId => {
         viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, viewer.model, true);
     });
@@ -278,8 +319,6 @@ async function initializeModelColors() {
     console.log('Color de selección configurado a rojo.');
 }
 
-
-// Función para procesar las propiedades del modelo y construir la lista de clasificación
 async function processModelProperties() {
     console.log('--- processModelProperties INICIADO ---');
     if (!viewer || !viewer.model) {
@@ -304,17 +343,17 @@ async function processModelProperties() {
 
     console.log(`[processModelProperties] Iniciando procesamiento de propiedades para ${allModelDbIds.length} elementos.`);
 
-    const groupedDbIds = new Set(); // ← Para registrar qué dbIds ya fueron agrupados
+    const groupedDbIds = new Set();
     let processedCount = 0;
 
     for (const dbId of allModelDbIds) {
         try {
             const props = await getPropertiesAsync(dbId);
             const properties = props.properties;
-            
+
             const categoryProp = properties.find(p => p.displayName === 'Category');
             if (categoryProp && categoryProp.displayValue.includes('Type')) {
-                continue; // Omitir tipos
+                continue;
             }
 
             let codigoPartida1Value = null;
@@ -330,7 +369,6 @@ async function processModelProperties() {
                 descripcionPartida1Value = (descProp.displayValue || '').trim();
             }
 
-            // Solo clasificar si tiene un código válido
             if (codigoPartida1Value && codigoPartida1Value !== '') {
                 const groupingKey = codigoPartida1Value;
                 const displayGroupName = descripcionPartida1Value
@@ -359,7 +397,6 @@ async function processModelProperties() {
         }
     }
 
-    // Identificar y agrupar los no clasificados
     const ungroupedDbIds = allModelDbIds.filter(id => !groupedDbIds.has(id));
     if (ungroupedDbIds.length > 0) {
         classificationData['SIN CÓDIGO'] = {
@@ -378,14 +415,11 @@ async function processModelProperties() {
 }
 
 
-
-// Maneja el clic en un elemento de la lista de clasificación
 function onClassificationListItemClick(key) {
     const item = classificationData[key];
     if (!item || !viewer) return;
 
-    // Restablecer el color de todos los elementos a gris antes de seleccionar
-    viewer.clearThemingColors(); // Limpia cualquier color temático aplicado previamente
+    viewer.clearThemingColors();
     allModelDbIds.forEach(dbId => {
         viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, viewer.model, true);
     });
@@ -395,22 +429,19 @@ function onClassificationListItemClick(key) {
 
     const dbIdsArray = Array.from(item.dbIds);
     if (dbIdsArray.length > 0) {
-        // Aplica el color de selección a los elementos
         dbIdsArray.forEach(dbId => {
             viewer.setThemingColor(dbId, SELECTION_RED_COLOR, viewer.model, true);
         });
-        viewer.select(dbIdsArray); // Esto también los selecciona visualmente (cuadro azul por defecto)
+        viewer.select(dbIdsArray);
         viewer.fitToView(dbIdsArray);
         dbIdsArray.forEach(id => currentSelectedDbIds.add(id));
     }
-    viewer.impl.invalidate(true, true, true); // Forzar redibujado
+    viewer.impl.invalidate(true, true, true);
 
     updateClassificationListSelection();
 }
 
-// Maneja el evento de cambio de selección en el visor 3D
 function onViewerSelectionChanged(event) {
-    // Restablecer el color de todos los elementos a gris
     viewer.clearThemingColors();
     allModelDbIds.forEach(dbId => {
         viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, viewer.model, true);
@@ -418,32 +449,28 @@ function onViewerSelectionChanged(event) {
 
     currentSelectedDbIds = new Set(event.dbIdArray);
 
-    // Aplicar color rojo a los elementos seleccionados
     currentSelectedDbIds.forEach(dbId => {
         viewer.setThemingColor(dbId, SELECTION_RED_COLOR, viewer.model, true);
     });
-    viewer.impl.invalidate(true, true, true); // Forzar redibujado
+    viewer.impl.invalidate(true, true, true);
 
     updateClassificationListSelection();
 }
 
-// Función para renderizar la lista de clasificación en el DOM
-// Función para renderizar la lista de clasificación en el DOM
 function renderClassificationList() {
     console.log('--- renderClassificationList INICIADO ---');
     const container = document.getElementById('classificationListContainer');
-    container.innerHTML = ''; // Limpiar el contenedor
+    container.innerHTML = '';
 
     const ul = document.createElement('ul');
 
-    // Ordenar las claves alfabéticamente, pero "SIN CÓDIGO" al final
     const sortedKeys = Object.keys(classificationData).sort((a, b) => {
-        if (a === 'SIN CÓDIGO') return 1; // 'SIN CÓDIGO' al final
+        if (a === 'SIN CÓDIGO') return 1;
         if (b === 'SIN CÓDIGO') return -1;
         return a.localeCompare(b);
     });
 
-    if (sortedKeys.length === 0) { // Si no hay claves, o solo 'SIN CÓDIGO' vacío
+    if (sortedKeys.length === 0) {
         console.warn('[renderClassificationList] No hay datos de clasificación válidos para renderizar.');
         container.innerHTML = '<p>No se encontraron categorías de clasificación.</p>';
         console.log('--- renderClassificationList COMPLETADO (VACÍO) ---');
@@ -453,15 +480,13 @@ function renderClassificationList() {
 
     sortedKeys.forEach(key => {
         const item = classificationData[key];
-        // Asegúrate de que el grupo tenga dbIds antes de renderizarlo (excepto 'SIN CÓDIGO' que puede ser útil vacío)
         if (item.dbIds.size === 0 && key !== 'SIN CÓDIGO') {
-            return; // Saltar si no hay elementos en este grupo (y no es 'SIN CÓDIGO')
+            return;
         }
 
         const li = document.createElement('li');
-        // *** CAMBIO CLAVE AQUÍ: Usar item.displayName para el texto visible ***
-        li.textContent = item.displayName || key; // Fallback a key si displayName no existe (no debería pasar)
-        li.dataset.key = key; // Almacenar la clave de agrupación real para referencia
+        li.textContent = item.displayName || key;
+        li.dataset.key = key;
 
         const countSpan = document.createElement('span');
         countSpan.classList.add('count');
@@ -477,22 +502,18 @@ function renderClassificationList() {
     console.log('--- renderClassificationList COMPLETADO ---');
 }
 
-// Actualiza las clases 'selected' en los elementos de la lista en base a currentSelectedDbIds
 function updateClassificationListSelection() {
     const listItems = document.querySelectorAll('#classificationListContainer li');
     listItems.forEach(li => {
         const key = li.dataset.key;
         const itemDbIds = classificationData[key]?.dbIds || new Set();
-        
-        // Verificar si TODOS los dbIds seleccionados en el viewer pertenecen a esta categoría
-        // Y si esta categoría es la única seleccionada completamente
+
         let allSelectedBelongToThisCategory = true;
         let categoryIsCompletelySelected = true;
 
         if (currentSelectedDbIds.size === 0) {
-            allSelectedBelongToThisCategory = false; // Nada seleccionado, ninguna categoría completa
+            allSelectedBelongToThisCategory = false;
         } else {
-            // Verificar si todos los dbIds seleccionados en el viewer están en esta categoría
             for (const dbId of currentSelectedDbIds) {
                 if (!itemDbIds.has(dbId)) {
                     allSelectedBelongToThisCategory = false;
@@ -500,9 +521,8 @@ function updateClassificationListSelection() {
                 }
             }
 
-            // Verificar si esta categoría está completamente seleccionada (todos sus elementos)
             if (currentSelectedDbIds.size !== itemDbIds.size) {
-                 categoryIsCompletelySelected = false;
+                categoryIsCompletelySelected = false;
             } else {
                 for (const idOfCategory of itemDbIds) {
                     if (!currentSelectedDbIds.has(idOfCategory)) {
@@ -512,27 +532,15 @@ function updateClassificationListSelection() {
                 }
             }
         }
-        
-        // Aplica la clase 'selected' si la categoría está completamente seleccionada en el viewer
-        // Simplificación: si todos los elementos seleccionados del viewer están en esta categoría y
-        // no hay otros elementos seleccionados fuera de esta categoría, la marcamos.
-        // Esto puede ser más complejo si permites selección múltiple de categorías.
+
         if (allSelectedBelongToThisCategory && categoryIsCompletelySelected && currentSelectedDbIds.size > 0) {
-             li.classList.add('selected');
+            li.classList.add('selected');
         } else {
-             li.classList.remove('selected');
+            li.classList.remove('selected');
         }
     });
-}
-
-// Maneja el evento de cambio de selección en el visor 3D
-function onViewerSelectionChanged(event) {
-    // console.log('Selección en el visor ha cambiado:', event.dbIdArray);
-    currentSelectedDbIds = new Set(event.dbIdArray); // Actualiza los IDs seleccionados
-    updateClassificationListSelection();
 }
 
 window.addEventListener('resize', () => {
     if (viewer) viewer.resize();
 });
-

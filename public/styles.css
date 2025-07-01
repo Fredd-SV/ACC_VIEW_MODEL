@@ -30,9 +30,9 @@ html, body {
 .left-row-top {
     flex-shrink: 0;
     flex-grow: 0;
-    padding-bottom: 20px;
+    padding-bottom: 5px;
     border-bottom: 1px solid #eee;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     box-sizing: border-box;
 }
 
@@ -40,37 +40,31 @@ html, body {
     flex-grow: 1;
     flex-shrink: 1;
     min-height: 0;
-    margin-bottom: 20px;
+    margin-bottom: 2px;
     box-sizing: border-box;
 }
 
-
-
-
 .left-row-bottom {
-    /* Mantén tus propiedades existentes */
     flex-shrink: 0;
     flex-grow: 0;
     color: #666;
     font-size: 0.9em;
     box-sizing: border-box;
     border-top: 1px solid #eee;
-    padding-top: 20px;
-
-    /* AÑADE ESTO para convertirlo en un contenedor flex para su contenido */
+    padding-top: 2px;
     display: flex;
     flex-direction: column;
-    height: calc(55vh - 40px); /* Opcional: ajusta la altura si prefieres que la lista tenga más espacio */
-    min-height: 0; /* Permite que se encoja */
+    height: 45%; /* 45% de la altura total del panel izquierdo */
+    min-height: 0;
 }
 
 #classificationListContainer {
-    flex-grow: 1; /* Permite que la lista ocupe el espacio restante */
-    overflow-y: auto; /* Para que la lista haga scroll si es muy larga */
-    padding-right: 5px; /* Pequeño padding para el scrollbar */
+    flex-grow: 1;
+    overflow-y: auto;
+    padding-right: 5px;
 }
 
-/* Estilos para los elementos de la lista generados dinámicamente */
+/* Estilos para los elementos de la lista de clasificación */
 #classificationListContainer ul {
     list-style: none;
     padding: 0;
@@ -78,21 +72,23 @@ html, body {
 }
 
 #classificationListContainer li {
-    padding: 8px 5px;
+    padding: 8px 10px; /* Consistente con folderTree */
     cursor: pointer;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid #eee; /* Aplicado a todos los li por defecto */
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease, font-weight 0.2s ease;
 }
 
 #classificationListContainer li:last-child {
-    border-bottom: none;
+    border-bottom: none; /* Remueve el borde del último li */
 }
 
 #classificationListContainer li:hover {
-    background-color: #eaf6ff;
+    background-color: #eaf6ff; /* Color de fondo al pasar el ratón */
+    color: #0056b3; /* Color de texto al pasar el ratón */
+    font-weight: bold;
 }
 
 #classificationListContainer li.selected {
@@ -101,20 +97,10 @@ html, body {
     font-weight: bold;
 }
 
-#classificationListContainer li .count {
-    background-color: #e0e0e0;
-    color: #555;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 0.8em;
-}
-
 #classificationListContainer li.selected .count {
     background-color: #fff;
     color: #007bff;
 }
-
-
 
 /* Panel derecho (70% de ancho) */
 .right-panel {
@@ -221,19 +207,54 @@ select {
 
 #folderTree ul {
     list-style: none;
-    padding-left: 15px;
+    padding-left: 0; /* Important: Remove default UL padding */
     margin: 0;
     flex-grow: 1;
 }
 
 #folderTree li {
-    padding: 5px 0;
+    padding: 8px 10px; /* Adjust padding for better visual spacing and selection */
     cursor: pointer;
-    color: #444;
+    color: #444; /* Color de texto por defecto para todos los ítems */
+    border-bottom: 1px solid #eee; /* Aplicado a todos los li por defecto */
+    transition: background-color 0.2s ease, color 0.2s ease, font-weight 0.2s ease;
+    outline: none; /* Elimina el contorno de foco por defecto del navegador */
 }
 
+#folderTree li:last-child {
+    border-bottom: none; /* Remueve el borde del último li */
+}
+
+/* Estilo de hover general para LI (se aplica a los archivos principalmente) */
 #folderTree li:hover {
-    background-color: #eaf6ff;
+    background-color: #eaf6ff; /* Color de fondo al pasar el ratón */
+    color: #0056b3; /* Color de texto al pasar el ratón */
+    font-weight: bold; /* El texto se pone en negrita */
+}
+
+/* Estilo de hover ESPECÍFICO para las CARPETAS (sobrescribe el estilo general de li:hover) */
+#folderTree li.folder:hover {
+    background-color: #f0f8ff; /* Un fondo aún más claro, o el que prefieras para carpetas */
+    color: #444; /* Mantener el color de texto normal para carpetas en hover */
+    font-weight: normal; /* Asegura que las carpetas NO se pongan en negrita al hacer hover */
+}
+
+/* Nuevo estilo para el elemento seleccionado en el folderTree (SOLO archivos RVT) */
+#folderTree li.selected-file {
+    background-color: #007bff;
+    color: white;
+    font-weight: bold;
+}
+
+/* Estilo para un elemento de carpeta clickeado/activo (feedback inmediato, usando la clase del JS) */
+#folderTree li.folder.active-folder {
+    background-color: #d1e7ff; /* Un azul más claro para el clic de la carpeta */
+    color: #0056b3;
+}
+
+/* Pseudo-clase :active para feedback muy breve al presionar la carpeta */
+#folderTree li.folder:active {
+    background-color: #d1e7ff;
     color: #0056b3;
 }
 
@@ -242,13 +263,12 @@ p {
     margin-bottom: 10px;
 }
 
-
 /* Asegura que el contenedor principal del Viewer ocupe el 100% del espacio de forgeViewer */
 #forgeViewer > .adsk-viewing-viewer {
-    position: relative; /* Importante para que los hijos con position: absolute se posicionen correctamente */
+    position: relative;
     width: 100% !important;
     height: 100% !important;
-    display: flex; /* Asegura que sus hijos también respeten flexbox */
+    display: flex;
     flex-direction: column;
     overflow: hidden;
 }
@@ -257,23 +277,20 @@ p {
 #forgeViewer canvas {
     width: 100% !important;
     height: 100% !important;
-    display: block; /* Elimina cualquier espacio extra que pueda generar el canvas como inline-block */
+    display: block;
 }
 
-/* También puedes apuntar a los divs que Forge crea para el control de la escena y la interfaz */
 #forgeViewer .lmv-canvas-wrap,
 #forgeViewer .lmv-viewer-controls,
 #forgeViewer .lmv-full-gui {
     width: 100% !important;
     height: 100% !important;
-    position: absolute; /* O relative, dependiendo de la estructura interna, pero absoluto suele ser necesario para la capa superior */
+    position: absolute;
     top: 0;
     left: 0;
-    /* Considera si necesitas flex-grow: 1; aquí si son contenedores flex, pero !important en height/width suele ser suficiente */
 }
 
-/* Si hay algún otro div intermedio que no se ajuste, puedes añadirlo aquí */
-#forgeViewer .adsk-lmv-viewer { /* Este es otro contenedor común */
+#forgeViewer .adsk-lmv-viewer {
     width: 100% !important;
     height: 100% !important;
     display: flex;
@@ -281,7 +298,6 @@ p {
     overflow: hidden;
 }
 
-/* Asegúrate de que tu forgeViewer original siga teniendo sus propiedades flexbox */
 #forgeViewer {
     flex-grow: 1;
     min-height: 0;
@@ -290,5 +306,24 @@ p {
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     background-color: #ffffff;
-    /* Asegúrate que no haya un height: fijo; aquí */
+}
+
+/* Estilos para el scrollbar */
+::-webkit-scrollbar {
+    width: 8px; /* Ancho del scrollbar vertical */
+    height: 8px; /* Alto del scrollbar horizontal */
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1; /* Color del track */
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888; /* Color del "pulgar" del scrollbar */
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555; /* Color del "pulgar" al pasar el mouse */
 }
