@@ -154,28 +154,50 @@ function base64EncodeURN(urn) {
 }
 
 document.getElementById('analyzeButton').addEventListener('click', async () => {
-    if (selectedItems.length === 0) {
-        alert('No hay archivos RVT seleccionados');
-        return;
-    }
+    if (selectedItems.length === 0) {
+        alert('No hay archivos RVT seleccionados');
+        return;
+    }
 
-    classificationData = {};
-    allModelDbIds = [];
-    currentSelectedDbIds.clear();
-    viewer?.clearThemingColors();
+    console.log('--- INICIANDO ANÁLISIS DE MODELOS ---');
+    console.log('Modelos seleccionados:', selectedItems);
 
-    await launchViewer();
+    classificationData = {};
+    allModelDbIds = [];
+    currentSelectedDbIds.clear();
+    viewer?.clearThemingColors();
 
-    for (const item of selectedItems) {
-        console.log('Traduciendo URN:', item.urn);
-        await fetch(`/api/translate?urn=${encodeURIComponent(item.urn)}`, { method: 'POST' });
+    await launchViewer();
 
-        const docId = 'urn:' + base64EncodeURN(item.urn);
-        await loadModelIntoViewer(docId);
-    }
+    for (const item of selectedItems) {
+        console.log(`[1] Iniciando traducción para: ${item.name} (${item.urn})`);
 
-    await initializeModelColors();
-    await processModelProperties();
+        const response = await fetch(`/api/translate?urn=${encodeURIComponent(item.urn)}`, { method: 'POST' });
+        const translateResult = await response.json();
+
+        console.log(`[2] Resultado de /api/translate para ${item.name}:`, translateResult);
+
+        const docId = 'urn:' + base64EncodeURN(item.urn);
+
+        console.log(`[3] Cargando modelo en visor: ${docId}`);
+
+        try {
+            await loadModelIntoViewer(docId);
+            console.log(`[4] Modelo cargado exitosamente: ${item.name}`);
+        } catch (err) {
+            console.error(`[ERROR] Fallo al cargar modelo ${item.name}:`, err);
+        }
+    }
+
+    console.log('[5] Iniciando inicialización de colores...');
+    await initializeModelColors();
+    console.log('[6] Colores aplicados');
+
+    console.log('[7] Procesando propiedades del modelo...');
+    await processModelProperties();
+    console.log('[8] Clasificación terminada');
+
+    console.log('--- FIN DEL ANÁLISIS DE MODELOS ---');
 });
 
 async function launchViewer() {
@@ -206,14 +228,32 @@ async function loadModelIntoViewer(documentId) {
     return new Promise((resolve, reject) => {
         Autodesk.Viewing.Document.load(documentId, (doc) => {
             const defaultModel = doc.getRoot().getDefaultGeometry();
-            viewer.loadDocumentNode(doc, defaultModel, { keepCurrentModels: true });
-            resolve();
+
+            const onGeometryLoaded = (event) => {
+                if (event.model && event.model === model) {
+                    viewer.removeEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeometryLoaded);
+                    resolve(); // modelo completamente cargado
+                }
+            };
+
+            const model = viewer.loadDocumentNode(doc, defaultModel, {
+                keepCurrentModels: true
+            });
+
+            viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeometryLoaded);
+
+            // Protección contra timeout (por si no se dispara el evento)
+            setTimeout(() => {
+                viewer.removeEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeometryLoaded);
+                resolve(); // continuar de todos modos después de un tiempo
+            }, 10000); // 10 segundos máximo
         }, (err) => {
             console.error('Error cargando modelo:', err);
             reject(err);
         });
     });
 }
+
 
 async function initializeModelColors() {
     if (!viewer) return;
