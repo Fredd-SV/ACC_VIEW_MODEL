@@ -94,80 +94,53 @@ async function buildFolderTree(projectId, folderUrn, container) {
 
         const ul = document.createElement('ul');
 
-        // Separar carpetas y archivos
-        const folders = data.data.filter(item => item.type === 'folders');
-        const files = data.data.filter(item => item.type === 'items');
-
-        // Filtrar carpetas vacías (requiere petición por cada una)
-        const visibleFolders = [];
-
-        for (const folder of folders) {
-            try {
-                const folderRes = await fetch(`/api/folder-contents/${projectId}/${encodeURIComponent(folder.id)}`);
-                const folderContents = await folderRes.json();
-
-                if (folderContents.data && folderContents.data.length > 0) {
-                    visibleFolders.push(folder); // Solo si tiene contenido
-                }
-            } catch (innerErr) {
-                console.warn(`Error comprobando carpeta ${folder.attributes.displayName}`, innerErr);
-            }
-        }
-
-        // Agregar carpetas visibles
-        for (const folder of visibleFolders) {
-            const li = document.createElement('li');
-            li.textContent = folder.attributes.displayName;
-            li.classList.add('folder');
-
-            li.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                if (previouslySelectedFolderElement) {
-                    previouslySelectedFolderElement.classList.remove('active-folder');
-                }
-                li.classList.add('active-folder');
-                previouslySelectedFolderElement = li;
-
-                if (previouslySelectedFileElement) {
-                    previouslySelectedFileElement.classList.remove('selected-file');
-                    previouslySelectedFileElement = null;
-                }
-
-                if (li.querySelector('ul')) {
-                    li.querySelector('ul').remove();
-                } else {
-                    await buildFolderTree(projectId, folder.id, li);
-                }
-            });
-
-            ul.appendChild(li);
-        }
-
-        // Agregar archivos RVT normalmente
-        for (const item of files) {
+        data.data.forEach(item => {
             const li = document.createElement('li');
             li.textContent = item.attributes.displayName;
 
-            li.addEventListener('click', (e) => {
-                e.stopPropagation();
-
-                if (item.attributes.displayName.toLowerCase().endsWith('.rvt')) {
-                    const urn = item.relationships?.tip?.data?.id;
-                    if (!selectedItems.find(i => i.urn === urn)) {
-                        selectedItems.push({ urn, name: item.attributes.displayName });
-
-                        const option = document.createElement('option');
-                        option.value = urn;
-                        option.textContent = item.attributes.displayName;
-                        document.getElementById('selectedFilesList').appendChild(option);
-
-                        document.getElementById('analyzeButton').disabled = false;
+            if (item.type === 'folders') {
+                li.classList.add('folder');
+                li.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (previouslySelectedFolderElement) {
+                        previouslySelectedFolderElement.classList.remove('active-folder');
                     }
-                }
-            });
+                    li.classList.add('active-folder');
+                    previouslySelectedFolderElement = li;
+
+                    if (previouslySelectedFileElement) {
+                        previouslySelectedFileElement.classList.remove('selected-file');
+                        previouslySelectedFileElement = null;
+                    }
+
+                    if (li.querySelector('ul')) {
+                        li.querySelector('ul').remove();
+                    } else {
+                        await buildFolderTree(projectId, item.id, li);
+                    }
+                });
+            } else if (item.type === 'items') {
+                li.addEventListener('click', (e) => {
+                    e.stopPropagation();
+
+                    if (item.attributes.displayName.toLowerCase().endsWith('.rvt')) {
+                        const urn = item.relationships?.tip?.data?.id;
+                        if (!selectedItems.find(i => i.urn === urn)) {
+                            selectedItems.push({ urn, name: item.attributes.displayName });
+
+                            const option = document.createElement('option');
+                            option.value = urn;
+                            option.textContent = item.attributes.displayName;
+                            document.getElementById('selectedFilesList').appendChild(option);
+
+                            document.getElementById('analyzeButton').disabled = false;
+                        }
+                    }
+                });
+            }
 
             ul.appendChild(li);
-        }
+        });
 
         container.appendChild(ul);
 
@@ -175,7 +148,6 @@ async function buildFolderTree(projectId, folderUrn, container) {
         console.error('Error cargando carpeta:', error);
     }
 }
-
 
 function base64EncodeURN(urn) {
     return btoa(urn).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
