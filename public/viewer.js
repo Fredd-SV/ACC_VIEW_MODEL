@@ -388,7 +388,7 @@ function onClassificationListItemClick(key) {
 
     viewer.clearThemingColors();
 
-    // Restaurar a color gris todos los elementos
+    // Restaurar todos los elementos a color gris
     for (const { dbId, model } of allModelDbIds) {
         viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
     }
@@ -397,22 +397,21 @@ function onClassificationListItemClick(key) {
     currentSelectedDbIds.clear();
 
     const dbIdsArray = Array.from(item.dbIds);
-    dbIdsArray.forEach(({ dbId, model }) => {
-        viewer.setThemingColor(dbId, SELECTION_RED_COLOR, model, true);
-        currentSelectedDbIds.add(`${dbId}-${model.id}`);
-    });
 
-    // FitToView con todos los elementos (opcionalmente puedes agrupar por modelo)
+    // Agrupar dbIds por modelo
     const modelGroups = {};
     dbIdsArray.forEach(({ dbId, model }) => {
+        currentSelectedDbIds.add(`${dbId}-${model.id}`);
         if (!modelGroups[model.id]) modelGroups[model.id] = [];
         modelGroups[model.id].push(dbId);
     });
 
+    // Aplicar selección visual (resalte)
     Object.entries(modelGroups).forEach(([modelId, dbIds]) => {
         const model = viewer.impl.modelQueue().getModels().find(m => m.id == modelId);
         if (model && dbIds.length > 0) {
-            viewer.fitToView(dbIds, model);
+            viewer.select(dbIds, model);
+            viewer.fitToView(dbIds, model); // También hacer zoom a la selección
         }
     });
 
