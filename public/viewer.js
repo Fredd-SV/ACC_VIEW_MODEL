@@ -1,17 +1,13 @@
-let selectedItemUrn = null;
 let viewer = null;
-
 let classificationData = {};
 let currentSelectedDbIds = new Set();
 let allModelDbIds = [];
 const DEFAULT_GRAY_COLOR = new THREE.Vector4(0.8, 0.8, 0.8, 1);
 const SELECTION_RED_COLOR = new THREE.Vector4(1, 0, 0, 0.8);
 
-// Variable para mantener el elemento de archivo RVT previamente seleccionado en el folderTree
+let selectedItems = []; // [{urn, displayName}]
 let previouslySelectedFileElement = null;
-// NUEVA VARIABLE: Para mantener el elemento de CARPETA previamente activo en el folderTree
 let previouslySelectedFolderElement = null;
-
 
 function login() {
     window.location.href = '/login';
@@ -34,17 +30,15 @@ async function loadHubs() {
     hubsSelect.disabled = false;
 
     if (data.data.length > 0) {
-        hubsSelect.value = data.data[0].id; // selecciona el primero
+        hubsSelect.value = data.data[0].id;
         loadProjects();
     }
 }
 
 async function loadProjects() {
     const hubId = document.getElementById('hubs').value;
-    if (!hubId) {
-        console.warn('No hay hub seleccionado');
-        return;
-    }
+    if (!hubId) return;
+
     try {
         const res = await fetch(`/api/projects/${hubId}`);
         const data = await res.json();
@@ -65,7 +59,6 @@ async function loadProjects() {
     }
 }
 
-// Cargar hubs si ya está autenticado
 window.onload = async () => {
     const res = await fetch('/api/check-auth');
     const authStatus = await res.json();
@@ -83,14 +76,12 @@ async function loadRootFolder() {
         const resProject = await fetch(`/api/project-details/${hubId}/${projectId}`);
         const projectData = await resProject.json();
         const rootFolderUrn = projectData.data.relationships.rootFolder.data.id;
-        console.log('Root Folder URN:', rootFolderUrn);
 
         const container = document.getElementById('folderTree');
         container.innerHTML = '';
-        previouslySelectedFileElement = null; // Reiniciar selección de archivo
-        previouslySelectedFolderElement = null; // Reiniciar selección de carpeta
+        previouslySelectedFileElement = null;
+        previouslySelectedFolderElement = null;
         await buildFolderTree(projectId, rootFolderUrn, container);
-
     } catch (error) {
         console.error('Error cargando root folder:', error);
     }
@@ -111,26 +102,20 @@ async function buildFolderTree(projectId, folderUrn, container) {
                 li.classList.add('folder');
                 li.addEventListener('click', async (e) => {
                     e.stopPropagation();
-
-                    // Lógica para el feedback visual de la carpeta seleccionada
                     if (previouslySelectedFolderElement) {
-                        previouslySelectedFolderElement.classList.remove('active-folder'); // O 'data-active' si lo prefieres
+                        previouslySelectedFolderElement.classList.remove('active-folder');
                     }
-                    li.classList.add('active-folder'); // Puedes crear este estilo en CSS
+                    li.classList.add('active-folder');
                     previouslySelectedFolderElement = li;
 
-                    // Deseleccionar cualquier archivo RVT previamente seleccionado
                     if (previouslySelectedFileElement) {
                         previouslySelectedFileElement.classList.remove('selected-file');
                         previouslySelectedFileElement = null;
                     }
 
-
-                    // Si ya está expandida, la colapsamos
                     if (li.querySelector('ul')) {
                         li.querySelector('ul').remove();
                     } else {
-                        // Si no, cargamos sus hijos
                         await buildFolderTree(projectId, item.id, li);
                     }
                 });
@@ -138,39 +123,18 @@ async function buildFolderTree(projectId, folderUrn, container) {
                 li.addEventListener('click', (e) => {
                     e.stopPropagation();
 
-                    // Deseleccionar cualquier carpeta previamente activa
-                    if (previouslySelectedFolderElement) {
-                        previouslySelectedFolderElement.classList.remove('active-folder');
-                        previouslySelectedFolderElement = null;
-                    }
-
                     if (item.attributes.displayName.toLowerCase().endsWith('.rvt')) {
-                        console.log('Archivo RVT seleccionado:', item);
+                        const urn = item.relationships?.tip?.data?.id;
+                        if (!selectedItems.find(i => i.urn === urn)) {
+                            selectedItems.push({ urn, name: item.attributes.displayName });
 
-                        // Eliminar la clase de selección del elemento previamente seleccionado (solo para archivos RVT)
-                        if (previouslySelectedFileElement) {
-                            previouslySelectedFileElement.classList.remove('selected-file');
+                            const option = document.createElement('option');
+                            option.value = urn;
+                            option.textContent = item.attributes.displayName;
+                            document.getElementById('selectedFilesList').appendChild(option);
+
+                            document.getElementById('analyzeButton').disabled = false;
                         }
-                        // Agregar la clase de selección al elemento actual
-                        li.classList.add('selected-file');
-                        // Actualizar el elemento previamente seleccionado
-                        previouslySelectedFileElement = li;
-
-                        selectedItemUrn = item.relationships?.tip?.data?.id;
-
-                        document.getElementById('selectedFileName').value = item.attributes.displayName;
-                        document.getElementById('analyzeButton').disabled = false;
-                    } else {
-                        console.log('Archivo no RVT ignorado:', item.attributes.displayName);
-                        // Si se selecciona un archivo no RVT, asegúrate de deseleccionar cualquier RVT anterior
-                        if (previouslySelectedFileElement) {
-                            previouslySelectedFileElement.classList.remove('selected-file');
-                            previouslySelectedFileElement = null;
-                        }
-                        // Asegúrate de que selectedItemUrn y analyzeButton también se reinicien para no RVT
-                        selectedItemUrn = null;
-                        document.getElementById('selectedFileName').value = '';
-                        document.getElementById('analyzeButton').disabled = true;
                     }
                 });
             }
@@ -189,279 +153,165 @@ function base64EncodeURN(urn) {
     return btoa(urn).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
-
-// MODEL
 document.getElementById('analyzeButton').addEventListener('click', async () => {
-    if (!selectedItemUrn) {
-        alert('No hay archivo RVT seleccionado');
-        return;
-    }
-
-    try {
-        console.log('Solicitando derivación para URN:', selectedItemUrn);
-
-        const translateResponse = await fetch(`/api/translate?urn=${encodeURIComponent(selectedItemUrn)}`, {
-            method: 'POST'
-        });
-
-        const translateResult = await translateResponse.json();
-        console.log('Resultado de la derivación:', translateResult);
-
-        launchViewer(selectedItemUrn);
-
-    } catch (error) {
-        console.error('Error solicitando derivación:', error);
-    }
-});
-
-async function launchViewer(urn) {
-    if (!urn) {
-        console.error('No URN especificado');
-        return;
-    }
-
-    try {
-        const options = {
-            env: 'AutodeskProduction',
-            getAccessToken: async (onTokenReady) => {
-                const res = await fetch('/api/token');
-                const tokenData = await res.json();
-                onTokenReady(tokenData.access_token, tokenData.expires_in);
-            }
-        };
-
-        Autodesk.Viewing.Initializer(options, () => {
-            const viewerDiv = document.getElementById('forgeViewer');
-            if (viewer) {
-                viewer.finish();
-                viewer = null;
-                viewerDiv.innerHTML = '';
-            }
-
-            viewer = new Autodesk.Viewing.GuiViewer3D(viewerDiv);
-            const startedCode = viewer.start();
-
-            viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, async () => {
-                console.log('GEOMETRY_LOADED_EVENT disparado. Redimensionando visor y procesando propiedades.');
-                viewer.resize();
-
-                await initializeModelColors();
-                await processModelProperties();
-            });
-
-            viewer.addEventListener(Autodesk.Viewing.VIEWER_STATE_RESTORED_EVENT, () => {
-                console.log('VIEWER_STATE_RESTORED_EVENT disparado. Redimensionando visor.');
-                viewer.resize();
-            });
-
-            viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, onViewerSelectionChanged);
-
-            console.log('Viewer started:', startedCode);
-
-            const documentId = 'urn:' + base64EncodeURN(urn);
-            console.log('Lanzando Viewer con URN:', documentId);
-
-            Autodesk.Viewing.Document.load(documentId, (doc) => {
-                const defaultModel = doc.getRoot().getDefaultGeometry();
-                viewer.loadDocumentNode(doc, defaultModel);
-            }, (errorCode) => {
-                console.error('Error cargando el documento:', errorCode);
-            });
-        });
-    } catch (error) {
-        console.error('Error lanzando el Viewer:', error);
-    }
-}
-
-async function initializeModelColors() {
-    if (!viewer || !viewer.model) {
-        console.warn('Visor o modelo no disponibles para inicializar colores.');
-        return;
-    }
-
-    allModelDbIds = [];
-    const positionsMap = new Set();
-
-    const tree = await new Promise(resolve => {
-        viewer.model.getObjectTree(resolve);
-    });
-
-    tree.enumNodeChildren(tree.getRootId(), dbId => {
-        const fragIds = [];
-        viewer.model.getData().instanceTree.enumNodeFragments(dbId, fragId => {
-            fragIds.push(fragId);
-        });
-
-        if (fragIds.length === 0) return;
-
-        const fragList = viewer.model.getFragmentList();
-        const box = new THREE.Box3();
-        fragList.getWorldBounds(fragIds[0], box);
-
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-
-        const key = `${center.x.toFixed(3)}|${center.y.toFixed(3)}|${center.z.toFixed(3)}`;
-        if (!positionsMap.has(key)) {
-            positionsMap.add(key);
-            allModelDbIds.push(dbId);
-        }
-    }, true);
-
-    console.log(`[initializeModelColors] dbIds con posición única encontrados: ${allModelDbIds.length}`);
-
-    allModelDbIds.forEach(dbId => {
-        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, viewer.model, true);
-    });
-
-    viewer.impl.invalidate(true, true, true);
-    viewer.setSelectionColor(new THREE.Color(1, 0, 0));
-    console.log('Color de selección configurado a rojo.');
-}
-
-async function processModelProperties() {
-    console.log('--- processModelProperties INICIADO ---');
-    if (!viewer || !viewer.model) {
-        console.warn('[processModelProperties] Visor o modelo no disponible. Saliendo.');
+    if (selectedItems.length === 0) {
+        alert('No hay archivos RVT seleccionados');
         return;
     }
 
     classificationData = {};
-    console.log('[processModelProperties] classificationData inicializada VACÍA.');
+    allModelDbIds = [];
+    currentSelectedDbIds.clear();
+    viewer?.clearThemingColors();
 
-    function getPropertiesAsync(dbId) {
-        return new Promise((resolve, reject) => {
-            viewer.getProperties(dbId, resolve, reject);
+    await launchViewer();
+
+    for (const item of selectedItems) {
+        console.log('Traduciendo URN:', item.urn);
+        await fetch(`/api/translate?urn=${encodeURIComponent(item.urn)}`, { method: 'POST' });
+
+        const docId = 'urn:' + base64EncodeURN(item.urn);
+        await loadModelIntoViewer(docId);
+    }
+
+    await initializeModelColors();
+    await processModelProperties();
+});
+
+async function launchViewer() {
+    const options = {
+        env: 'AutodeskProduction',
+        getAccessToken: async (onTokenReady) => {
+            const res = await fetch('/api/token');
+            const tokenData = await res.json();
+            onTokenReady(tokenData.access_token, tokenData.expires_in);
+        }
+    };
+
+    Autodesk.Viewing.Initializer(options, () => {
+        const viewerDiv = document.getElementById('forgeViewer');
+        if (viewer) {
+            viewer.finish();
+            viewer = null;
+            viewerDiv.innerHTML = '';
+        }
+
+        viewer = new Autodesk.Viewing.GuiViewer3D(viewerDiv);
+        viewer.start();
+        viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, onViewerSelectionChanged);
+    });
+}
+
+async function loadModelIntoViewer(documentId) {
+    return new Promise((resolve, reject) => {
+        Autodesk.Viewing.Document.load(documentId, (doc) => {
+            const defaultModel = doc.getRoot().getDefaultGeometry();
+            viewer.loadDocumentNode(doc, defaultModel, { keepCurrentModels: true });
+            resolve();
+        }, (err) => {
+            console.error('Error cargando modelo:', err);
+            reject(err);
         });
+    });
+}
+
+async function initializeModelColors() {
+    if (!viewer) return;
+
+    allModelDbIds = [];
+    const positionsMap = new Set();
+
+    const models = viewer.getVisibleModels();
+    if (!models || models.length === 0) return;
+
+    for (const model of models) {
+        const tree = await new Promise(resolve => model.getObjectTree(resolve));
+        tree.enumNodeChildren(tree.getRootId(), dbId => {
+            const fragIds = [];
+            model.getData().instanceTree.enumNodeFragments(dbId, fragId => fragIds.push(fragId));
+            if (fragIds.length === 0) return;
+
+            const fragList = model.getFragmentList();
+            const box = new THREE.Box3();
+            fragList.getWorldBounds(fragIds[0], box);
+
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            const key = `${center.x.toFixed(3)}|${center.y.toFixed(3)}|${center.z.toFixed(3)}`;
+            if (!positionsMap.has(key)) {
+                positionsMap.add(key);
+                allModelDbIds.push({ dbId, model });
+            }
+        }, true);
     }
 
-    if (allModelDbIds.length === 0) {
-        console.error('[processModelProperties] ERROR: allModelDbIds está vacío. La clasificación no puede continuar.');
-        renderClassificationList();
-        return;
+    for (const { dbId, model } of allModelDbIds) {
+        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
     }
 
-    console.log(`[processModelProperties] Iniciando procesamiento de propiedades para ${allModelDbIds.length} elementos.`);
+    viewer.impl.invalidate(true, true, true);
+    viewer.setSelectionColor(new THREE.Color(1, 0, 0));
+}
 
+
+async function processModelProperties() {
+    if (!viewer) return;
+
+    classificationData = {};
     const groupedDbIds = new Set();
-    let processedCount = 0;
 
-    for (const dbId of allModelDbIds) {
+    function getPropertiesAsync(model, dbId) {
+        return new Promise((resolve, reject) => model.getProperties(dbId, resolve, reject));
+    }
+
+    for (const { dbId, model } of allModelDbIds) {
         try {
-            const props = await getPropertiesAsync(dbId);
+            const props = await getPropertiesAsync(model, dbId);
             const properties = props.properties;
 
-            const categoryProp = properties.find(p => p.displayName === 'Category');
-            if (categoryProp && categoryProp.displayValue.includes('Type')) {
-                continue;
-            }
-
-            let codigoPartida1Value = null;
-            let descripcionPartida1Value = null;
-
             const codeProp = properties.find(p => p.displayName.trim().toUpperCase() === 'S&P_CODIGO PARTIDA N°1');
-            if (codeProp) {
-                codigoPartida1Value = (codeProp.displayValue || '').trim();
-            }
-
             const descProp = properties.find(p => p.displayName.trim().toUpperCase() === 'S&P_DESCRIPCION PARTIDA N°1');
-            if (descProp) {
-                descripcionPartida1Value = (descProp.displayValue || '').trim();
-            }
 
-            if (codigoPartida1Value && codigoPartida1Value !== '') {
-                const groupingKey = codigoPartida1Value;
-                const displayGroupName = descripcionPartida1Value
-                    ? `${codigoPartida1Value} - ${descripcionPartida1Value}`
-                    : codigoPartida1Value;
+            const code = codeProp?.displayValue?.trim();
+            const desc = descProp?.displayValue?.trim();
 
-                if (!classificationData[groupingKey]) {
-                    classificationData[groupingKey] = {
+            if (code && code !== '') {
+                const displayGroup = desc ? `${code} - ${desc}` : code;
+
+                if (!classificationData[code]) {
+                    classificationData[code] = {
                         dbIds: new Set(),
                         visible: true,
-                        displayName: displayGroupName
+                        displayName: displayGroup
                     };
                 }
 
-                classificationData[groupingKey].dbIds.add(dbId);
-                groupedDbIds.add(dbId);
+                classificationData[code].dbIds.add({ dbId, model });
+                groupedDbIds.add(`${dbId}-${model.id}`);
             }
-
         } catch (error) {
-            console.error(`[processModelProperties] Error obteniendo propiedades para dbId ${dbId}:`, error);
-        }
-
-        processedCount++;
-        if (processedCount % 1000 === 0) {
-            console.log(`[processModelProperties] Progreso: ${processedCount}/${allModelDbIds.length} elementos procesados.`);
+            console.error(`Error obteniendo propiedades para dbId ${dbId}:`, error);
         }
     }
 
-    const ungroupedDbIds = allModelDbIds.filter(id => !groupedDbIds.has(id));
-    if (ungroupedDbIds.length > 0) {
+    // Agregar elementos sin clasificar
+    const allKeys = allModelDbIds.map(obj => `${obj.dbId}-${obj.model.id}`);
+    const ungrouped = allModelDbIds.filter(obj => !groupedDbIds.has(`${obj.dbId}-${obj.model.id}`));
+    if (ungrouped.length > 0) {
         classificationData['SIN CÓDIGO'] = {
-            dbIds: new Set(ungroupedDbIds),
+            dbIds: new Set(ungrouped),
             visible: true,
             displayName: 'SIN CÓDIGO'
         };
-        console.log(`[processModelProperties] Elementos no clasificados agrupados en "SIN CÓDIGO": ${ungroupedDbIds.length}`);
     }
-
-    console.log(`[processModelProperties] Procesamiento finalizado. Total de elementos procesados: ${processedCount}.`);
-    console.log('Contenido final de classificationData:', classificationData);
 
     renderClassificationList();
-    console.log('--- processModelProperties COMPLETADO ---');
 }
 
-
-function onClassificationListItemClick(key) {
-    const item = classificationData[key];
-    if (!item || !viewer) return;
-
-    viewer.clearThemingColors();
-    allModelDbIds.forEach(dbId => {
-        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, viewer.model, true);
-    });
-
-    viewer.clearSelection();
-    currentSelectedDbIds.clear();
-
-    const dbIdsArray = Array.from(item.dbIds);
-    if (dbIdsArray.length > 0) {
-        dbIdsArray.forEach(dbId => {
-            viewer.setThemingColor(dbId, SELECTION_RED_COLOR, viewer.model, true);
-        });
-        viewer.select(dbIdsArray);
-        viewer.fitToView(dbIdsArray);
-        dbIdsArray.forEach(id => currentSelectedDbIds.add(id));
-    }
-    viewer.impl.invalidate(true, true, true);
-
-    updateClassificationListSelection();
-}
-
-function onViewerSelectionChanged(event) {
-    viewer.clearThemingColors();
-    allModelDbIds.forEach(dbId => {
-        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, viewer.model, true);
-    });
-
-    currentSelectedDbIds = new Set(event.dbIdArray);
-
-    currentSelectedDbIds.forEach(dbId => {
-        viewer.setThemingColor(dbId, SELECTION_RED_COLOR, viewer.model, true);
-    });
-    viewer.impl.invalidate(true, true, true);
-
-    updateClassificationListSelection();
-}
 
 function renderClassificationList() {
-    console.log('--- renderClassificationList INICIADO ---');
     const container = document.getElementById('classificationListContainer');
     container.innerHTML = '';
-
     const ul = document.createElement('ul');
 
     const sortedKeys = Object.keys(classificationData).sort((a, b) => {
@@ -470,20 +320,8 @@ function renderClassificationList() {
         return a.localeCompare(b);
     });
 
-    if (sortedKeys.length === 0) {
-        console.warn('[renderClassificationList] No hay datos de clasificación válidos para renderizar.');
-        container.innerHTML = '<p>No se encontraron categorías de clasificación.</p>';
-        console.log('--- renderClassificationList COMPLETADO (VACÍO) ---');
-        return;
-    }
-
-
     sortedKeys.forEach(key => {
         const item = classificationData[key];
-        if (item.dbIds.size === 0 && key !== 'SIN CÓDIGO') {
-            return;
-        }
-
         const li = document.createElement('li');
         li.textContent = item.displayName || key;
         li.dataset.key = key;
@@ -498,9 +336,69 @@ function renderClassificationList() {
     });
 
     container.appendChild(ul);
-    console.log('Lista de clasificación renderizada:', classificationData);
-    console.log('--- renderClassificationList COMPLETADO ---');
 }
+
+function onClassificationListItemClick(key) {
+    const item = classificationData[key];
+    if (!item || !viewer) return;
+
+    viewer.clearThemingColors();
+
+    // Restaurar a color gris todos los elementos
+    for (const { dbId, model } of allModelDbIds) {
+        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
+    }
+
+    viewer.clearSelection();
+    currentSelectedDbIds.clear();
+
+    const dbIdsArray = Array.from(item.dbIds);
+    dbIdsArray.forEach(({ dbId, model }) => {
+        viewer.setThemingColor(dbId, SELECTION_RED_COLOR, model, true);
+        currentSelectedDbIds.add(`${dbId}-${model.id}`);
+    });
+
+    // FitToView con todos los elementos (opcionalmente puedes agrupar por modelo)
+    const modelGroups = {};
+    dbIdsArray.forEach(({ dbId, model }) => {
+        if (!modelGroups[model.id]) modelGroups[model.id] = [];
+        modelGroups[model.id].push(dbId);
+    });
+
+    Object.entries(modelGroups).forEach(([modelId, dbIds]) => {
+        const model = viewer.impl.modelQueue().getModels().find(m => m.id == modelId);
+        if (model && dbIds.length > 0) {
+            viewer.fitToView(dbIds, model);
+        }
+    });
+
+    viewer.impl.invalidate(true, true, true);
+    updateClassificationListSelection();
+}
+
+
+function onViewerSelectionChanged(event) {
+    viewer.clearThemingColors();
+
+    // Restaurar todos a gris
+    for (const { dbId, model } of allModelDbIds) {
+        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
+    }
+
+    currentSelectedDbIds.clear();
+
+    for (const model of viewer.getVisibleModels()) {
+        const selection = viewer.getSelection(model);
+        for (const dbId of selection) {
+            viewer.setThemingColor(dbId, SELECTION_RED_COLOR, model, true);
+            currentSelectedDbIds.add(`${dbId}-${model.id}`);
+        }
+    }
+
+    viewer.impl.invalidate(true, true, true);
+    updateClassificationListSelection();
+}
+
 
 function updateClassificationListSelection() {
     const listItems = document.querySelectorAll('#classificationListContainer li');
@@ -508,32 +406,17 @@ function updateClassificationListSelection() {
         const key = li.dataset.key;
         const itemDbIds = classificationData[key]?.dbIds || new Set();
 
-        let allSelectedBelongToThisCategory = true;
-        let categoryIsCompletelySelected = true;
+        let allSelected = true;
+        let sameSize = currentSelectedDbIds.size === itemDbIds.size;
 
-        if (currentSelectedDbIds.size === 0) {
-            allSelectedBelongToThisCategory = false;
-        } else {
-            for (const dbId of currentSelectedDbIds) {
-                if (!itemDbIds.has(dbId)) {
-                    allSelectedBelongToThisCategory = false;
-                    break;
-                }
-            }
-
-            if (currentSelectedDbIds.size !== itemDbIds.size) {
-                categoryIsCompletelySelected = false;
-            } else {
-                for (const idOfCategory of itemDbIds) {
-                    if (!currentSelectedDbIds.has(idOfCategory)) {
-                        categoryIsCompletelySelected = false;
-                        break;
-                    }
-                }
+        for (const { dbId, model } of itemDbIds) {
+            if (!currentSelectedDbIds.has(`${dbId}-${model.id}`)) {
+                allSelected = false;
+                break;
             }
         }
 
-        if (allSelectedBelongToThisCategory && categoryIsCompletelySelected && currentSelectedDbIds.size > 0) {
+        if (allSelected && sameSize && currentSelectedDbIds.size > 0) {
             li.classList.add('selected');
         } else {
             li.classList.remove('selected');
@@ -541,6 +424,27 @@ function updateClassificationListSelection() {
     });
 }
 
+
 window.addEventListener('resize', () => {
     if (viewer) viewer.resize();
+});
+
+// Habilita eliminación manual al hacer doble clic sobre una opción del select multiple
+const selectedFilesList = document.getElementById('selectedFilesList');
+selectedFilesList.addEventListener('dblclick', (e) => {
+    const selectedOption = e.target;
+    if (selectedOption.tagName.toLowerCase() === 'option') {
+        const urnToRemove = selectedOption.value;
+
+        // Eliminar del array selectedItems
+        selectedItems = selectedItems.filter(item => item.urn !== urnToRemove);
+
+        // Eliminar del DOM
+        selectedOption.remove();
+
+        // Desactivar el botón si no hay archivos
+        if (selectedItems.length === 0) {
+            document.getElementById('analyzeButton').disabled = true;
+        }
+    }
 });

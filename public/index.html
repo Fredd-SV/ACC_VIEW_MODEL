@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Visualizador de ACC</title>
-    <link rel="stylesheet" href="/styles.css?v=1.2.1"> </head>
+    <link rel="stylesheet" href="/styles.css?v=1.2.1">
+</head>
 <body>
 
 <div class="container">
@@ -24,22 +25,21 @@
             <h3>CLASIFICACIÓN POR CÓDIGO DE PARTIDA</h3>
             <div id="classificationListContainer" style="overflow-y: auto; flex-grow: 1;">
                 <p>Cargando clasificaciones...</p>
+            </div>
         </div>
-</div>
     </div>
 
    <div class="right-panel">
         <h2>MODELO 3D</h2>
         <div id="modelControls">
-            <input id="selectedFileName" />
-            <button id="analyzeButton">ANALIZAR MODELO</button>
+            <select id="selectedFilesList" multiple size="5"></select>
+            <button id="analyzeButton" disabled>ANALIZAR MODELO</button>
         </div>
         <div id="forgeViewer"></div>
     </div>
 
 </div>
 
-<!-- Forge Viewer SDK -->
 <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css" type="text/css">
 <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js"></script>
 
