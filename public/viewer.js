@@ -94,53 +94,80 @@ async function buildFolderTree(projectId, folderUrn, container) {
 
         const ul = document.createElement('ul');
 
-        data.data.forEach(item => {
+        // Separar carpetas y archivos
+        const folders = data.data.filter(item => item.type === 'folders');
+        const files = data.data.filter(item => item.type === 'items');
+
+        // Filtrar carpetas vacías (requiere petición por cada una)
+        const visibleFolders = [];
+
+        for (const folder of folders) {
+            try {
+                const folderRes = await fetch(`/api/folder-contents/${projectId}/${encodeURIComponent(folder.id)}`);
+                const folderContents = await folderRes.json();
+
+                if (folderContents.data && folderContents.data.length > 0) {
+                    visibleFolders.push(folder); // Solo si tiene contenido
+                }
+            } catch (innerErr) {
+                console.warn(`Error comprobando carpeta ${folder.attributes.displayName}`, innerErr);
+            }
+        }
+
+        // Agregar carpetas visibles
+        for (const folder of visibleFolders) {
+            const li = document.createElement('li');
+            li.textContent = folder.attributes.displayName;
+            li.classList.add('folder');
+
+            li.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (previouslySelectedFolderElement) {
+                    previouslySelectedFolderElement.classList.remove('active-folder');
+                }
+                li.classList.add('active-folder');
+                previouslySelectedFolderElement = li;
+
+                if (previouslySelectedFileElement) {
+                    previouslySelectedFileElement.classList.remove('selected-file');
+                    previouslySelectedFileElement = null;
+                }
+
+                if (li.querySelector('ul')) {
+                    li.querySelector('ul').remove();
+                } else {
+                    await buildFolderTree(projectId, folder.id, li);
+                }
+            });
+
+            ul.appendChild(li);
+        }
+
+        // Agregar archivos RVT normalmente
+        for (const item of files) {
             const li = document.createElement('li');
             li.textContent = item.attributes.displayName;
 
-            if (item.type === 'folders') {
-                li.classList.add('folder');
-                li.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    if (previouslySelectedFolderElement) {
-                        previouslySelectedFolderElement.classList.remove('active-folder');
+            li.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                if (item.attributes.displayName.toLowerCase().endsWith('.rvt')) {
+                    const urn = item.relationships?.tip?.data?.id;
+                    if (!selectedItems.find(i => i.urn === urn)) {
+                        selectedItems.push({ urn, name: item.attributes.displayName });
+
+                        const option = document.createElement('option');
+                        option.value = urn;
+                        option.textContent = item.attributes.displayName;
+                        document.getElementById('selectedFilesList').appendChild(option);
+
+                        document.getElementById('analyzeButton').disabled = false;
                     }
-                    li.classList.add('active-folder');
-                    previouslySelectedFolderElement = li;
-
-                    if (previouslySelectedFileElement) {
-                        previouslySelectedFileElement.classList.remove('selected-file');
-                        previouslySelectedFileElement = null;
-                    }
-
-                    if (li.querySelector('ul')) {
-                        li.querySelector('ul').remove();
-                    } else {
-                        await buildFolderTree(projectId, item.id, li);
-                    }
-                });
-            } else if (item.type === 'items') {
-                li.addEventListener('click', (e) => {
-                    e.stopPropagation();
-
-                    if (item.attributes.displayName.toLowerCase().endsWith('.rvt')) {
-                        const urn = item.relationships?.tip?.data?.id;
-                        if (!selectedItems.find(i => i.urn === urn)) {
-                            selectedItems.push({ urn, name: item.attributes.displayName });
-
-                            const option = document.createElement('option');
-                            option.value = urn;
-                            option.textContent = item.attributes.displayName;
-                            document.getElementById('selectedFilesList').appendChild(option);
-
-                            document.getElementById('analyzeButton').disabled = false;
-                        }
-                    }
-                });
-            }
+                }
+            });
 
             ul.appendChild(li);
-        });
+        }
 
         container.appendChild(ul);
 
@@ -148,6 +175,7 @@ async function buildFolderTree(projectId, folderUrn, container) {
         console.error('Error cargando carpeta:', error);
     }
 }
+
 
 function base64EncodeURN(urn) {
     return btoa(urn).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -236,8 +264,11 @@ async function loadModelIntoViewer(documentId) {
                 keepCurrentModels: true
             });
 
+            let resolved = false;
+
             const onGeometryLoaded = (event) => {
-                if (event.model === model) {
+                if (event.model === model && !resolved) {
+                    resolved = true;
                     viewer.removeEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeometryLoaded);
                     resolve();
                 }
@@ -245,11 +276,15 @@ async function loadModelIntoViewer(documentId) {
 
             viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeometryLoaded);
 
-            // Protección por timeout (opcional)
+            // Protección por timeout de respaldo (si falla el evento)
             setTimeout(() => {
-                viewer.removeEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeometryLoaded);
-                resolve();
-            }, 15000); // 15s máx
+                if (!resolved) {
+                    resolved = true;
+                    viewer.removeEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeometryLoaded);
+                    console.warn(`[WARN] Modelo cargado por timeout: ${documentId}`);
+                    resolve();
+                }
+            }, 2000); // solo si tarda más de 2s
         }, (err) => {
             console.error('Error cargando modelo:', err);
             reject(err);
@@ -258,13 +293,11 @@ async function loadModelIntoViewer(documentId) {
 }
 
 
-
 async function initializeModelColors() {
     if (!viewer) return;
 
     allModelDbIds = [];
     const positionsMap = new Set();
-
     const models = viewer.getVisibleModels();
     if (!models || models.length === 0) return;
 
@@ -289,8 +322,15 @@ async function initializeModelColors() {
         }, true);
     }
 
+    // Agrupar los dbIds por modelo para aplicar color por lote
+    const groupedByModel = new Map();
     for (const { dbId, model } of allModelDbIds) {
-        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
+        if (!groupedByModel.has(model)) groupedByModel.set(model, []);
+        groupedByModel.get(model).push(dbId);
+    }
+
+    for (const [model, dbIds] of groupedByModel.entries()) {
+        dbIds.forEach(dbId => viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true));
     }
 
     viewer.impl.invalidate(true, true, true);
@@ -304,42 +344,41 @@ async function processModelProperties() {
     classificationData = {};
     const groupedDbIds = new Set();
 
-    function getPropertiesAsync(model, dbId) {
-        return new Promise((resolve, reject) => model.getProperties(dbId, resolve, reject));
-    }
+    const propertyPromises = allModelDbIds.map(({ dbId, model }) => {
+        return new Promise((resolve, reject) => {
+            model.getProperties(dbId, (props) => {
+                resolve({ props, dbId, model });
+            }, reject);
+        });
+    });
 
-    for (const { dbId, model } of allModelDbIds) {
-        try {
-            const props = await getPropertiesAsync(model, dbId);
-            const properties = props.properties;
+    const allResults = await Promise.all(propertyPromises);
 
-            const codeProp = properties.find(p => p.displayName.trim().toUpperCase() === 'S&P_CODIGO PARTIDA N°1');
-            const descProp = properties.find(p => p.displayName.trim().toUpperCase() === 'S&P_DESCRIPCION PARTIDA N°1');
+    for (const { props, dbId, model } of allResults) {
+        const properties = props.properties;
 
-            const code = codeProp?.displayValue?.trim();
-            const desc = descProp?.displayValue?.trim();
+        const codeProp = properties.find(p => p.displayName.trim().toUpperCase() === 'S&P_CODIGO PARTIDA N°1');
+        const descProp = properties.find(p => p.displayName.trim().toUpperCase() === 'S&P_DESCRIPCION PARTIDA N°1');
 
-            if (code && code !== '') {
-                const displayGroup = desc ? `${code} - ${desc}` : code;
+        const code = codeProp?.displayValue?.trim();
+        const desc = descProp?.displayValue?.trim();
 
-                if (!classificationData[code]) {
-                    classificationData[code] = {
-                        dbIds: new Set(),
-                        visible: true,
-                        displayName: displayGroup
-                    };
-                }
+        if (code && code !== '') {
+            const displayGroup = desc ? `${code} - ${desc}` : code;
 
-                classificationData[code].dbIds.add({ dbId, model });
-                groupedDbIds.add(`${dbId}-${model.id}`);
+            if (!classificationData[code]) {
+                classificationData[code] = {
+                    dbIds: new Set(),
+                    visible: true,
+                    displayName: displayGroup
+                };
             }
-        } catch (error) {
-            console.error(`Error obteniendo propiedades para dbId ${dbId}:`, error);
+
+            classificationData[code].dbIds.add({ dbId, model });
+            groupedDbIds.add(`${dbId}-${model.id}`);
         }
     }
 
-    // Agregar elementos sin clasificar
-    const allKeys = allModelDbIds.map(obj => `${obj.dbId}-${obj.model.id}`);
     const ungrouped = allModelDbIds.filter(obj => !groupedDbIds.has(`${obj.dbId}-${obj.model.id}`));
     if (ungrouped.length > 0) {
         classificationData['SIN CÓDIGO'] = {
@@ -351,6 +390,7 @@ async function processModelProperties() {
 
     renderClassificationList();
 }
+
 
 
 function renderClassificationList() {
@@ -448,10 +488,16 @@ function onClassificationListItemClick(key) {
     const item = classificationData[key];
     if (!item || !viewer) return;
 
-    viewer.clearThemingColors();
-    allModelDbIds.forEach(({ dbId, model }) => {
-        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
-    });
+    // Restaurar colores
+    const groupedByModel = new Map();
+    for (const { dbId, model } of allModelDbIds) {
+        if (!groupedByModel.has(model)) groupedByModel.set(model, []);
+        groupedByModel.get(model).push(dbId);
+    }
+
+    for (const [model, dbIds] of groupedByModel.entries()) {
+        dbIds.forEach(dbId => viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true));
+    }
 
     viewer.clearSelection();
     currentSelectedDbIds.clear();
@@ -461,15 +507,16 @@ function onClassificationListItemClick(key) {
         const modelGroups = {};
 
         dbIdsArray.forEach(({ dbId, model }) => {
-            viewer.setThemingColor(dbId, SELECTION_RED_COLOR, model, true);
-            currentSelectedDbIds.add(`${dbId}-${model.id}`);
             if (!modelGroups[model.id]) modelGroups[model.id] = [];
             modelGroups[model.id].push(dbId);
+            currentSelectedDbIds.add(`${dbId}-${model.id}`);
         });
 
+        // Aplicar color y selección por modelo
         Object.entries(modelGroups).forEach(([modelId, dbIds]) => {
             const model = viewer.getVisibleModels().find(m => m.id == modelId);
             if (model) {
+                dbIds.forEach(dbId => viewer.setThemingColor(dbId, SELECTION_RED_COLOR, model, true));
                 viewer.select(dbIds, model);
                 viewer.fitToView(dbIds, model);
             }
@@ -480,15 +527,22 @@ function onClassificationListItemClick(key) {
     updateClassificationListSelection();
 }
 
+
 function onViewerSelectionChanged(event) {
-    viewer.clearThemingColors();
-    allModelDbIds.forEach(({ dbId, model }) => {
-        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
-    });
+    const groupedByModel = new Map();
+    for (const { dbId, model } of allModelDbIds) {
+        if (!groupedByModel.has(model)) groupedByModel.set(model, []);
+        groupedByModel.get(model).push(dbId);
+    }
+
+    for (const [model, dbIds] of groupedByModel.entries()) {
+        dbIds.forEach(dbId => viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true));
+    }
 
     currentSelectedDbIds.clear();
 
-    for (const model of viewer.getVisibleModels()) {
+    const models = viewer.getVisibleModels();
+    for (const model of models) {
         const selection = viewer.getSelection(model);
         for (const dbId of selection) {
             viewer.setThemingColor(dbId, SELECTION_RED_COLOR, model, true);
@@ -499,7 +553,6 @@ function onViewerSelectionChanged(event) {
     viewer.impl.invalidate(true, true, true);
     updateClassificationListSelection();
 }
-
 
 
 function updateClassificationListSelection() {
