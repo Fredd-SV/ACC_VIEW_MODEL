@@ -382,6 +382,7 @@ function renderClassificationList() {
     container.appendChild(ul);
 }
 
+/*
 function onClassificationListItemClick(key) {
     const item = classificationData[key];
     if (!item || !viewer) return;
@@ -441,6 +442,64 @@ function onViewerSelectionChanged(event) {
     viewer.impl.invalidate(true, true, true);
     updateClassificationListSelection();
 }
+*/
+
+function onClassificationListItemClick(key) {
+    const item = classificationData[key];
+    if (!item || !viewer) return;
+
+    viewer.clearThemingColors();
+    allModelDbIds.forEach(({ dbId, model }) => {
+        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
+    });
+
+    viewer.clearSelection();
+    currentSelectedDbIds.clear();
+
+    const dbIdsArray = Array.from(item.dbIds);
+    if (dbIdsArray.length > 0) {
+        const modelGroups = {};
+
+        dbIdsArray.forEach(({ dbId, model }) => {
+            viewer.setThemingColor(dbId, SELECTION_RED_COLOR, model, true);
+            currentSelectedDbIds.add(`${dbId}-${model.id}`);
+            if (!modelGroups[model.id]) modelGroups[model.id] = [];
+            modelGroups[model.id].push(dbId);
+        });
+
+        Object.entries(modelGroups).forEach(([modelId, dbIds]) => {
+            const model = viewer.getVisibleModels().find(m => m.id == modelId);
+            if (model) {
+                viewer.select(dbIds, model);
+                viewer.fitToView(dbIds, model);
+            }
+        });
+    }
+
+    viewer.impl.invalidate(true, true, true);
+    updateClassificationListSelection();
+}
+
+function onViewerSelectionChanged(event) {
+    viewer.clearThemingColors();
+    allModelDbIds.forEach(({ dbId, model }) => {
+        viewer.setThemingColor(dbId, DEFAULT_GRAY_COLOR, model, true);
+    });
+
+    currentSelectedDbIds.clear();
+
+    for (const model of viewer.getVisibleModels()) {
+        const selection = viewer.getSelection(model);
+        for (const dbId of selection) {
+            viewer.setThemingColor(dbId, SELECTION_RED_COLOR, model, true);
+            currentSelectedDbIds.add(`${dbId}-${model.id}`);
+        }
+    }
+
+    viewer.impl.invalidate(true, true, true);
+    updateClassificationListSelection();
+}
+
 
 
 function updateClassificationListSelection() {
